@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics SDK Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-bottom: 20px; }
+        .card { background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .card h3 { margin-bottom: 15px; color: #555; }
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn { padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; background: #007aff; color: white; }
+        .btn:hover { background: #0051d5; transform: translateY(-1px); }
+        .btn.secondary { background: #5ac8fa; }
+        .btn.secondary:hover { background: #007aff; }
+        #log { background: #1e1e1e; color: #4ec9b0; padding: 15px; margin-top: 20px; border-radius: 8px; max-height: 400px; overflow-y: auto; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; }
+        .log-item { margin: 5px 0; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .user-info { display: flex; gap: 20px; margin-bottom: 15px; font-size: 14px; color: #666; }
+        .user-info span { background: #e3f2fd; padding: 4px 12px; border-radius: 4px; }
+        .stat-card { display: inline-block; background: #e3f2fd; padding: 15px 25px; border-radius: 8px; text-align: center; margin-right: 15px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #007aff; }
+        .stat-label { font-size: 12px; color: #666; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Analytics 埋点系统 Demo</h1>
+
+        <div class="card">
+            <div class="user-info">
+                <span id="userId">用户ID: 加载中...</span>
+                <span id="sessionId">会话ID: 加载中...</span>
+            </div>
+            <div>
+                <div class="stat-card">
+                    <div class="stat-value" id="eventCount">0</div>
+                    <div class="stat-label">已发送事件</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="queueCount">0</div>
+                    <div class="stat-label">队列中</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>事件追踪</h3>
+            <div class="btn-group">
+                <button class="btn" id="btn1">首页按钮</button>
+                <button class="btn" id="btn2">功能按钮</button>
+                <button class="btn" id="btn3">购买按钮</button>
+                <button class="btn secondary" onclick="trackCustom()">自定义事件</button>
+                <button class="btn secondary" onclick="changeUser()">切换用户</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>事件日志</h3>
+            <div id="log">
+                <div class="log-item">等待事件...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="analytics.js"></script>
+    <script>
+        let eventCount = 0;
+
+        // 使用默认配置，无需填写任何参数
+        const analytics = new Analytics({
+            batchSize: 3,
+            debug: true
+        });
+
+        document.getElementById('userId').textContent = '用户ID: ' + analytics.config.userId;
+        document.getElementById('sessionId').textContent = '会话ID: ' + analytics.sessionId;
+
+        function trackCustom() {
+            analytics.track('custom', { action: 'manual_track', value: Math.floor(Math.random() * 100) });
+        }
+
+        function changeUser() {
+            analytics.resetUserId();
+            document.getElementById('userId').textContent = '用户ID: ' + analytics.config.userId;
+        }
+
+        const logDiv = document.getElementById('log');
+        let logCount = 0;
+
+        function addLog(type, data) {
+            if (logCount === 0) logDiv.innerHTML = '';
+            logCount++;
+
+            const item = document.createElement('div');
+            item.className = 'log-item';
+            item.innerHTML = `
+                <span style="color:#569cd6">${new Date().toLocaleTimeString()}</span>
+                <span style="color:#ce9178">[${type}]</span>
+                ${JSON.stringify(data).slice(0, 80)}
+            `;
+            logDiv.appendChild(item);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        setInterval(() => {
+            document.getElementById('queueCount').textContent = analytics.queue.length;
+        }, 100);
+
+        const originalFlush = analytics.flush.bind(analytics);
+        analytics.flush = async function() {
+            const count = this.queue.length;
+            const result = await originalFlush();
+            if (count > 0) {
+                eventCount += count;
+                document.getElementById('eventCount').textContent = eventCount;
+                addLog('BATCH', { count, eventCount });
+            }
+            return result;
+        };
+
+        const originalTrack = analytics.track.bind(analytics);
+        analytics.track = function(type, props) {
+            originalTrack(type, props);
+            addLog('QUEUE', { type, queueSize: this.queue.length });
+        };
+    </script>
+</body>
+</html>
